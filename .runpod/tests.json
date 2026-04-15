@@ -3,7 +3,7 @@
     {
       "name": "ocr_text_recognition",
       "input": {
-        "image": "https://huggingface.co/zai-org/GLM-OCR/resolve/main/assets/demo.png",
+        "image": "https://www.w3.org/WAI/WCAG21/Techniques/pdf/img/table-word.jpg",
         "prompt": "Text Recognition:",
         "max_tokens": 2048
       },
