@@ -1,0 +1,48 @@
+{
+  "title": "GLM-OCR Serverless",
+  "description": "GLM-OCR 0.9B vision-language model for document parsing, OCR, table/formula recognition. Powered by vLLM with RunPod serverless handler.",
+  "type": "serverless",
+  "category": "image",
+  "config": {
+    "runsOn": "GPU",
+    "containerDiskInGb": 30,
+    "env": [
+      {
+        "key": "MAX_MODEL_LEN",
+        "input": {
+          "name": "Max Context Length",
+          "type": "string",
+          "description": "Maximum context window in tokens",
+          "default": "16384"
+        }
+      },
+      {
+        "key": "GPU_MEMORY_UTILIZATION",
+        "input": {
+          "name": "GPU Memory Utilization",
+          "type": "string",
+          "description": "Fraction of GPU memory to use (0.0-1.0)",
+          "default": "0.95"
+        }
+      },
+      {
+        "key": "MAX_IMAGE_SIDE",
+        "input": {
+          "name": "Max Image Side",
+          "type": "string",
+          "description": "Max pixel dimension before resizing (reduces token usage)",
+          "default": "2000"
+        }
+      },
+      {
+        "key": "USE_GLMOCR_SDK",
+        "input": {
+          "name": "Use GLM-OCR SDK",
+          "type": "string",
+          "description": "Enable native SDK for structured layout+markdown output (1/0)",
+          "default": "1"
+        }
+      }
+    ]
+  }
+}
