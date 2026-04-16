@@ -4,12 +4,11 @@ RunPod Serverless handler for GLM-OCR — optimized for TCG card scanning.
 Optimizations over baseline:
 - bfloat16 + explicit CUDA placement (no device_map discovery overhead)
 - torch.inference_mode (faster than no_grad)
-- 768px max image side (fewer visual patches)
+- 768px max image side (fewer visual patches — ~85% reduction from 2000px)
 - BILINEAR resampling (faster than LANCZOS on CPU)
-- Smart crop: top 15% + bottom 15% of card (name + set/number only)
 - max_new_tokens=100 (card metadata is short)
 - Greedy decoding (do_sample=False, use_cache=True)
-- torch.compile on the model for fused kernels
+- torch.compile for fused CUDA kernels
 """
 
 import os
@@ -31,9 +30,6 @@ log = logging.getLogger("handler")
 MODEL_PATH = "zai-org/GLM-OCR"
 MAX_IMAGE_SIDE = int(os.getenv("MAX_IMAGE_SIDE", "768"))
 MAX_NEW_TOKENS = int(os.getenv("MAX_NEW_TOKENS", "100"))
-SMART_CROP = os.getenv("SMART_CROP", "1").lower() in {"1", "true", "yes"}
-CROP_TOP_RATIO = float(os.getenv("CROP_TOP_RATIO", "0.15"))
-CROP_BOTTOM_RATIO = float(os.getenv("CROP_BOTTOM_RATIO", "0.15"))
 
 processor = None
 model = None
@@ -51,7 +47,6 @@ def load_model():
         torch_dtype=torch.bfloat16,
     ).to("cuda")
 
-    # Compile for fused kernels — first inference is slower, rest are faster
     try:
         model = torch.compile(model, mode="reduce-overhead")
         log.info("torch.compile applied (reduce-overhead mode)")
@@ -78,37 +73,6 @@ def read_image(source):
     return Image.open(path)
 
 
-def smart_crop(img):
-    """
-    Crop a TCG card to just the name strip (top) and set/number strip (bottom),
-    then stack them vertically. This cuts visual tokens by ~70%.
-
-    If the image is landscape or nearly square, skip cropping (not a card).
-    """
-    w, h = img.size
-
-    # Only crop portrait images (cards are taller than wide)
-    if h < w * 1.2:
-        return img
-
-    top_h = max(1, int(h * CROP_TOP_RATIO))
-    bottom_h = max(1, int(h * CROP_BOTTOM_RATIO))
-
-    top_strip = img.crop((0, 0, w, top_h))
-    bottom_strip = img.crop((0, h - bottom_h, w, h))
-
-    # Stack vertically with a 2px gap
-    gap = 2
-    composite = Image.new(img.mode, (w, top_h + gap + bottom_h), (0, 0, 0))
-    composite.paste(top_strip, (0, 0))
-    composite.paste(bottom_strip, (0, top_h + gap))
-
-    log.info("Smart crop: %sx%s -> %sx%s (top %d%% + bottom %d%%)",
-             w, h, w, top_h + gap + bottom_h,
-             int(CROP_TOP_RATIO * 100), int(CROP_BOTTOM_RATIO * 100))
-    return composite
-
-
 def resize_image(img):
     """Resize to MAX_IMAGE_SIDE using fast BILINEAR resampling."""
     if MAX_IMAGE_SIDE <= 0:
@@ -120,14 +84,6 @@ def resize_image(img):
     ratio = MAX_IMAGE_SIDE / float(longest)
     new_size = (max(1, int(w * ratio)), max(1, int(h * ratio)))
     return img.resize(new_size, Image.Resampling.BILINEAR)
-
-
-def preprocess_image(img, use_smart_crop):
-    """Resize then optionally smart-crop for TCG cards."""
-    img = resize_image(img)
-    if use_smart_crop:
-        img = smart_crop(img)
-    return img
 
 
 def extract_image_and_prompt(job_input):
@@ -175,11 +131,10 @@ def handler(job):
         return {"error": "No image found in input. Provide 'image', 'url', or 'messages' with image_url."}
 
     max_tokens = job_input.get("max_tokens", MAX_NEW_TOKENS)
-    use_smart_crop = job_input.get("smart_crop", SMART_CROP)
 
     try:
         img = read_image(image_src)
-        img = preprocess_image(img, use_smart_crop)
+        img = resize_image(img)
     except Exception as e:
         log.error("Job %s: failed to load image: %s", job_id, e)
         return {"error": f"Failed to load image: {e}"}
