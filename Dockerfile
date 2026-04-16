@@ -13,7 +13,9 @@ ENV HF_HOME=/root/.cache/huggingface
 RUN python3 -c "from huggingface_hub import snapshot_download; snapshot_download('zai-org/GLM-OCR')"
 ENV HF_HUB_OFFLINE=1
 
-ENV MAX_IMAGE_SIDE=2000
+ENV MAX_IMAGE_SIDE=768
+ENV MAX_NEW_TOKENS=100
+ENV SMART_CROP=1
 
 COPY handler.py /handler.py
 

@@ -5,7 +5,8 @@
       "input": {
         "image": "https://www.w3.org/WAI/WCAG21/Techniques/pdf/img/table-word.jpg",
         "prompt": "Text Recognition:",
-        "max_tokens": 2048
+        "max_tokens": 100,
+        "smart_crop": false
       },
       "timeout": 120000
     }
